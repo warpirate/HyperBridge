@@ -1,15 +1,12 @@
 package com.d4viddf.hyperbridge.service
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.Context
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.d4viddf.hyperbridge.R
@@ -27,10 +24,16 @@ class NotificationReaderService : NotificationListenerService() {
 
     private val TAG = "HyperBridgeService"
     private val ISLAND_CHANNEL_ID = "hyper_bridge_island_channel"
+
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var allowedPackageSet: Set<String> = emptySet()
     private val activeTranslations = mutableMapOf<String, Int>()
 
+    // Performance: Rate Limiting Map (Key -> Last Update Timestamp)
+    private val lastUpdateMap = mutableMapOf<String, Long>()
+    private val UPDATE_INTERVAL_MS = 300L // Max 3 updates per second per app
+
+    // Translators
     private lateinit var progressTranslator: ProgressTranslator
     private lateinit var navTranslator: NavTranslator
     private lateinit var timerTranslator: TimerTranslator
@@ -47,19 +50,31 @@ class NotificationReaderService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        Log.i(TAG, "HyperBridge Connected")
         val preferences = AppPreferences(this)
-        serviceScope.launch { preferences.allowedPackagesFlow.collectLatest { allowedPackageSet = it } }
+        serviceScope.launch {
+            preferences.allowedPackagesFlow.collectLatest { allowedPackageSet = it }
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
     }
-    @androidx.annotation.RequiresPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn?.let {
-            if (it.packageName == packageName) return
-            if (allowedPackageSet.contains(it.packageName)) translateAndPost(it)
+            // 1. BLACKLIST: Critical System Apps & Self
+            if (shouldIgnore(it.packageName)) return
+
+            // 2. USER ALLOW LIST
+            if (isAppAllowed(it.packageName)) {
+
+                // 3. RATE LIMITER (Performance Fix)
+                if (shouldRateLimit(it)) return
+
+                translateAndPost(it)
+            }
         }
     }
 
@@ -68,23 +83,64 @@ class NotificationReaderService : NotificationListenerService() {
             val key = it.key
             if (activeTranslations.containsKey(key)) {
                 val hyperId = activeTranslations[key] ?: return
-                try { NotificationManagerCompat.from(this).cancel(hyperId) } catch (_: Exception) {}
+                try {
+                    NotificationManagerCompat.from(this).cancel(hyperId)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing island", e)
+                }
                 activeTranslations.remove(key)
+                lastUpdateMap.remove(key) // Clear cache
             }
         }
     }
 
-    @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
+    /**
+     * Determines if we should skip this update to save battery/CPU.
+     */
+    private fun shouldRateLimit(sbn: StatusBarNotification): Boolean {
+        val key = sbn.key
+        val now = System.currentTimeMillis()
+        val lastTime = lastUpdateMap[key] ?: 0L
+
+        // Always allow if enough time has passed
+        if (now - lastTime > UPDATE_INTERVAL_MS) {
+            lastUpdateMap[key] = now
+            return false
+        }
+
+        // Check if it's a "Progress" notification (High Frequency)
+        val extras = sbn.notification.extras
+        val isProgress = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0
+
+        if (isProgress) {
+            // Skip this frame (download is updating too fast)
+            return true
+        }
+
+        // If not progress (e.g. text changed), allow immediately
+        lastUpdateMap[key] = now
+        return false
+    }
+
+    private fun shouldIgnore(packageName: String): Boolean {
+        return packageName == this.packageName || // Don't bridge ourselves
+                packageName == "android" ||        // System Interface
+                packageName == "com.android.systemui" ||
+                packageName.contains("miui.notification")
+    }
+
     private fun translateAndPost(sbn: StatusBarNotification) {
         try {
             val extras = sbn.notification.extras
             val title = extras.getString(Notification.EXTRA_TITLE) ?: sbn.packageName
+
             val bridgeId = sbn.key.hashCode()
             val picKey = "pic_${bridgeId}"
 
-            // 1. Detection
+            // --- DETECTION ---
             val isNavigation = sbn.notification.category == Notification.CATEGORY_NAVIGATION ||
-                    sbn.packageName.contains("maps") || sbn.packageName.contains("waze")
+                    sbn.packageName.contains("maps") ||
+                    sbn.packageName.contains("waze")
 
             val progressMax = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
             val isIndeterminate = extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE)
@@ -93,7 +149,7 @@ class NotificationReaderService : NotificationListenerService() {
             val usesChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)
             val chronometerBase = sbn.notification.`when`
 
-            // 2. Translate (Get Data Only)
+            // --- ROUTING ---
             val data: HyperIslandData = when {
                 isNavigation -> navTranslator.translate(sbn, picKey)
                 usesChronometer && chronometerBase > 0 -> timerTranslator.translate(sbn, picKey)
@@ -101,33 +157,39 @@ class NotificationReaderService : NotificationListenerService() {
                 else -> standardTranslator.translate(sbn, picKey)
             }
 
-            // 3. Post using Standard Notification Builder
+            // --- POSTING ---
             val notificationBuilder = NotificationCompat.Builder(this, ISLAND_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle(title)
+                .setContentTitle("HyperBridge")
+                .setContentText("Active")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .addExtras(data.resources) // <--- Magic Bundle
+                .addExtras(data.resources)
 
             sbn.notification.contentIntent?.let { notificationBuilder.setContentIntent(it) }
 
             val notification = notificationBuilder.build()
-            notification.extras.putString("miui.focus.param", data.jsonParam) // <--- Magic JSON
+            notification.extras.putString("miui.focus.param", data.jsonParam)
 
             NotificationManagerCompat.from(this).notify(bridgeId, notification)
             activeTranslations[sbn.key] = bridgeId
 
         } catch (e: Exception) {
-            Log.e(TAG, "Bridge Error", e)
+            Log.e(TAG, "Translation failed for ${sbn.packageName}", e)
         }
     }
 
     private fun createIslandChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(ISLAND_CHANNEL_ID, "Active Islands", NotificationManager.IMPORTANCE_HIGH)
-            channel.setSound(null, null); channel.enableVibration(false)
+            val channel = NotificationChannel(
+                ISLAND_CHANNEL_ID, "Active Islands", NotificationManager.IMPORTANCE_HIGH
+            ).apply { setSound(null, null); enableVibration(false) }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
+    }
+
+    private fun isAppAllowed(packageName: String): Boolean {
+        return allowedPackageSet.contains(packageName)
     }
 }

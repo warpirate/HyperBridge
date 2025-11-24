@@ -2,7 +2,6 @@ package com.d4viddf.hyperbridge.ui
 
 import android.app.Application
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
@@ -10,7 +9,6 @@ import android.graphics.drawable.Drawable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.d4viddf.hyperbridge.data.AppPreferences
-import com.d4viddf.hyperbridge.data.dataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,36 +18,81 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// Simple data class for the UI
+// --- DATA MODELS ---
+
 data class AppInfo(
     val name: String,
     val packageName: String,
     val icon: Bitmap,
-    val isBridged: Boolean = false
+    val isBridged: Boolean = false,
+    val category: AppCategory = AppCategory.OTHER
 )
+
+enum class AppCategory(val label: String) {
+    ALL("All"),
+    MUSIC("Music"),
+    MAPS("Navigation"),
+    TIMER("Productivity"),
+    OTHER("Other")
+}
+
+// Removed Enabled/Disabled options
+enum class SortOption {
+    NAME_AZ, NAME_ZA
+}
+
+// --- VIEW MODEL ---
 
 class AppListViewModel(application: Application) : AndroidViewModel(application) {
 
     private val packageManager = application.packageManager
     private val preferences = AppPreferences(application)
 
-    // Raw list of installed apps
     private val _installedApps = MutableStateFlow<List<AppInfo>>(emptyList())
 
-    // Search query
+    // Filters
     val searchQuery = MutableStateFlow("")
+    val selectedCategory = MutableStateFlow(AppCategory.ALL)
+    val sortOption = MutableStateFlow(SortOption.NAME_AZ) // Default to A-Z
 
-    // FINAL STATE: Combines installed apps + User Preferences + Search Query
+    // Helpers for Categories
+    private val MUSIC_KEYS = listOf("music", "spotify", "youtube", "deezer", "tidal", "sound", "audio", "podcast")
+    private val MAPS_KEYS = listOf("map", "nav", "waze", "gps", "transit", "uber", "cabify")
+    private val TIMER_KEYS = listOf("clock", "timer", "alarm", "stopwatch", "calendar", "todo")
+
     val uiState: StateFlow<List<AppInfo>> = combine(
         _installedApps,
         preferences.allowedPackagesFlow,
-        searchQuery
-    ) { apps, allowedSet, query ->
-        apps.map { app ->
+        searchQuery,
+        selectedCategory,
+        sortOption
+    ) { apps, allowedSet, query, category, sort ->
+
+        // 1. Map bridged status
+        var result = apps.map { app ->
             app.copy(isBridged = allowedSet.contains(app.packageName))
-        }.filter {
-            it.name.contains(query, ignoreCase = true)
-        }.sortedBy { !it.isBridged } // Show active apps at the top
+        }
+
+        // 2. Filter by Search
+        if (query.isNotEmpty()) {
+            result = result.filter {
+                it.name.contains(query, ignoreCase = true) ||
+                        it.packageName.contains(query, ignoreCase = true)
+            }
+        }
+
+        // 3. Filter by Category
+        if (category != AppCategory.ALL) {
+            result = result.filter { it.category == category }
+        }
+
+        // 4. Apply Sorting (Simplified)
+        result = when (sort) {
+            SortOption.NAME_AZ -> result.sortedBy { it.name }
+            SortOption.NAME_ZA -> result.sortedByDescending { it.name }
+        }
+
+        result
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
@@ -68,34 +111,40 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // Heavy scanning logic moved to IO thread
-    private suspend fun getLaunchableApps(): List<AppInfo> = withContext(Dispatchers.IO) {
-        val intent = Intent(Intent.ACTION_MAIN, null).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-        }
+    // ACTIONS
+    fun setCategory(cat: AppCategory) { selectedCategory.value = cat }
+    fun setSort(option: SortOption) { sortOption.value = option }
+    fun clearSearch() { searchQuery.value = "" }
 
-        // Query for all apps that have a launcher icon
-        // This automatically filters out background services/system junk
+    private suspend fun getLaunchableApps(): List<AppInfo> = withContext(Dispatchers.IO) {
+        val intent = Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
         val resolveInfos = packageManager.queryIntentActivities(intent, 0)
 
         resolveInfos.mapNotNull { resolveInfo ->
             try {
-                val activityInfo = resolveInfo.activityInfo
+                val pkg = resolveInfo.activityInfo.packageName
+                if (pkg == getApplication<Application>().packageName) return@mapNotNull null
+
                 val name = resolveInfo.loadLabel(packageManager).toString()
-                val pkg = activityInfo.packageName
                 val icon = resolveInfo.loadIcon(packageManager).toBitmap()
 
-                AppInfo(name, pkg, icon)
-            } catch (e: Exception) {
-                null
-            }
-        }.distinctBy { it.packageName } // Remove duplicates
+                val cat = when {
+                    MUSIC_KEYS.any { pkg.contains(it, true) } -> AppCategory.MUSIC
+                    MAPS_KEYS.any { pkg.contains(it, true) } -> AppCategory.MAPS
+                    TIMER_KEYS.any { pkg.contains(it, true) } -> AppCategory.TIMER
+                    else -> AppCategory.OTHER
+                }
+
+                AppInfo(name, pkg, icon, category = cat)
+            } catch (e: Exception) { null }
+        }.distinctBy { it.packageName }.sortedBy { it.name }
     }
 
-    // Helper: Drawable -> Bitmap
     private fun Drawable.toBitmap(): Bitmap {
         if (this is BitmapDrawable) return this.bitmap
-        val bitmap = Bitmap.createBitmap(intrinsicWidth.coerceAtLeast(1), intrinsicHeight.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        val width = if (intrinsicWidth > 0) intrinsicWidth else 1
+        val height = if (intrinsicHeight > 0) intrinsicHeight else 1
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         setBounds(0, 0, canvas.width, canvas.height)
         draw(canvas)

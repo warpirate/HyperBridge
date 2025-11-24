@@ -4,36 +4,85 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.ToggleOn
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.ToggleOff
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.d4viddf.hyperbridge.data.AppPreferences
+import com.d4viddf.hyperbridge.ui.AppCategory
+import com.d4viddf.hyperbridge.ui.AppInfo
 import com.d4viddf.hyperbridge.ui.AppListViewModel
+import com.d4viddf.hyperbridge.ui.OnboardingScreen
+import com.d4viddf.hyperbridge.ui.SortOption
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,230 +93,243 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    HyperBridgeApp()
+                    MainNavigation()
                 }
             }
         }
+    }
+}
+
+@Composable
+fun MainNavigation() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val preferences = remember { AppPreferences(context) }
+    val isSetupComplete by preferences.isSetupComplete.collectAsState(initial = null)
+
+    when (isSetupComplete) {
+        null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        false -> OnboardingScreen { scope.launch { preferences.setSetupComplete(true) } }
+        true -> HyperBridgeMainScreen()
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HyperBridgeApp(
-    // We inject the ViewModel here to avoid the "Source not found" compiler bug
-    viewModel: AppListViewModel = viewModel()
-) {
-    val appList by viewModel.uiState.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
+fun HyperBridgeMainScreen(viewModel: AppListViewModel = viewModel()) {
     val context = LocalContext.current
+    // 0 = Active, 1 = Library
+    var selectedTab by remember { mutableIntStateOf(0) }
 
-    // Track permission state
-    var isPermissionMissing by remember {
-        mutableStateOf(!isNotificationServiceEnabled(context))
-    }
-
-    // Auto-refresh permission check when app resumes
-    DisposableEffect(Unit) {
-        val listener = androidx.core.util.Consumer<Intent> {
-            isPermissionMissing = !isNotificationServiceEnabled(context)
-        }
-        val activity = context as? ComponentActivity
-        activity?.addOnNewIntentListener(listener)
-        onDispose { activity?.removeOnNewIntentListener(listener) }
-    }
+    val appList by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("HyperBridge", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                title = { Text(if (selectedTab == 0) "Active Bridges" else "App Library", fontWeight = FontWeight.Bold) },
+                actions = {
+                    IconButton(onClick = {
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Cannot open settings", Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = { Icon(if(selectedTab==0) Icons.Filled.ToggleOn else Icons.Outlined.ToggleOff, null) },
+                    label = { Text("Active") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { Icon(if(selectedTab==1) Icons.Filled.Apps else Icons.Outlined.Apps, null) },
+                    label = { Text("Library") }
+                )
+            }
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
+        Box(modifier = Modifier.padding(padding)) {
+            if (selectedTab == 0) {
+                ActiveAppsScreen(appList, viewModel)
+            } else {
+                LibraryAppsScreen(appList, viewModel)
+            }
+        }
+    }
+}
 
-            // --- SECTION 1: CRITICAL WARNINGS ---
+// --- TAB 1: ACTIVE APPS ---
+@Composable
+fun ActiveAppsScreen(apps: List<AppInfo>, viewModel: AppListViewModel) {
+    val activeApps = apps.filter { it.isBridged }
 
-            if (isPermissionMissing) {
-                WarningCard(
-                    title = "Permission Needed",
-                    description = "You must enable Notification Access for HyperBridge to read notifications.",
-                    color = MaterialTheme.colorScheme.errorContainer,
+    if (activeApps.isEmpty()) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(Icons.Outlined.NotificationsOff, null, Modifier.size(64.dp), tint = Color.Gray)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("No Active Bridges", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
+            Text("Go to Library to add apps.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(activeApps, key = { it.packageName }) { app ->
+                AppListItem(app, isSimple = true) { viewModel.toggleApp(app.packageName, false) }
+            }
+        }
+    }
+}
+
+// --- TAB 2: LIBRARY (ALL APPS) ---
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@Composable
+fun LibraryAppsScreen(apps: List<AppInfo>, viewModel: AppListViewModel) {
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val selectedCategory by viewModel.selectedCategory.collectAsState()
+    val sortOption by viewModel.sortOption.collectAsState()
+
+    Column {
+        // 1. SEARCH BAR
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { viewModel.searchQuery.value = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            placeholder = { Text("Search apps...") },
+            leadingIcon = { Icon(Icons.Default.Search, null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { viewModel.clearSearch() }) {
+                        Icon(Icons.Default.Clear, null)
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        // 2. FILTERS ROW
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(AppCategory.entries.toTypedArray()) { category ->
+                FilterChip(
+                    selected = selectedCategory == category,
+                    onClick = { viewModel.setCategory(category) },
+                    label = { Text(category.label) },
+                    leadingIcon = if (selectedCategory == category) {
+                        { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                    } else null
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 3. SORT ROW (UPDATED: Only A-Z and Z-A)
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                AssistChip(
                     onClick = {
-                        context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        // Toggle between A-Z and Z-A
+                        val nextSort = if (sortOption == SortOption.NAME_AZ) SortOption.NAME_ZA else SortOption.NAME_AZ
+                        viewModel.setSort(nextSort)
+                    },
+                    label = {
+                        Text(if (sortOption == SortOption.NAME_AZ) "Sort: A-Z" else "Sort: Z-A")
+                    },
+                    leadingIcon = {
+                        val icon = if (sortOption == SortOption.NAME_AZ) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward
+                        Icon(icon, null, Modifier.size(16.dp))
                     }
                 )
             }
+        }
 
-            // --- SECTION 2: XIAOMI OPTIMIZATIONS ---
-            // Required to prevent the service from dying in background
-            ExpandableOptimizationCard(context)
+        HorizontalDivider(
+            modifier = Modifier
+                .padding(vertical = 8.dp)
+                .alpha(0.5f)
+        )
 
-            // --- SECTION 3: SEARCH ---
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.searchQuery.value = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Search apps...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
-
-            // --- SECTION 4: APP LIST ---
-            if (appList.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+        // 4. LIST
+        if (apps.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No apps found", color = Color.Gray)
+            }
+        } else {
+            LazyColumn {
+                items(apps, key = { it.packageName }) { app ->
+                    AppListItem(app, isSimple = false) { viewModel.toggleApp(app.packageName, it) }
                 }
-            } else {
-                LazyColumn {
-                    items(appList, key = { it.packageName }) { app ->
-                        AppListItem(
-                            name = app.name,
-                            pkg = app.packageName,
-                            icon = app.icon,
-                            isBridged = app.isBridged,
-                            onToggle = { isEnabled ->
-                                viewModel.toggleApp(app.packageName, isEnabled)
-                            }
-                        )
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                    }
-                    // Bottom padding for scrolling
-                    item { Spacer(modifier = Modifier.height(80.dp)) }
-                }
+                item { Spacer(modifier = Modifier.height(80.dp)) }
             }
         }
     }
 }
 
 @Composable
-fun AppListItem(
-    name: String,
-    pkg: String,
-    icon: android.graphics.Bitmap,
-    isBridged: Boolean,
-    onToggle: (Boolean) -> Unit
-) {
+fun AppListItem(app: AppInfo, isSimple: Boolean, onToggle: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggle(!isBridged) }
-            .padding(16.dp),
+            .clickable { onToggle(!app.isBridged) }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Image(
-            bitmap = icon.asImageBitmap(),
+            bitmap = app.icon.asImageBitmap(),
             contentDescription = null,
             modifier = Modifier.size(48.dp)
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = name,
+                text = app.name,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold
             )
-            Text(
-                text = pkg,
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
-                maxLines = 1
-            )
+            if (!isSimple) {
+                Text(
+                    text = app.packageName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    maxLines = 1
+                )
+            }
         }
         Switch(
-            checked = isBridged,
-            onCheckedChange = onToggle
+            checked = app.isBridged,
+            onCheckedChange = onToggle,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFF34C759),
+                checkedTrackColor = Color(0xFF34C759).copy(alpha = 0.3f)
+            )
         )
     }
 }
 
-@Composable
-fun WarningCard(title: String, description: String, color: Color, onClick: () -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = color),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.Warning, contentDescription = null)
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(text = title, fontWeight = FontWeight.Bold)
-                Text(text = description, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-}
-
-@Composable
-fun ExpandableOptimizationCard(context: Context) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3).copy(alpha = 0.15f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clickable { expanded = !expanded },
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Settings, contentDescription = null, tint = Color(0xFF2196F3))
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    "Xiaomi System Setup",
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2196F3)
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(if (expanded) "Hide" else "Show", color = Color(0xFF2196F3))
-            }
-
-            if (expanded) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    "HyperOS kills apps in the background. You MUST enable these settings or the Island will stop working.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Button 1: Autostart
-                Button(
-                    onClick = { openAutoStartSettings(context) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
-                ) {
-                    Text("1. Enable Autostart")
-                }
-
-                // Button 2: Battery Saver
-                OutlinedButton(
-                    onClick = { openBatterySettings(context) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("2. Set Battery to 'No Restrictions'")
-                }
-            }
-        }
-    }
-}
-
-// --- HELPER FUNCTIONS ---
+// --- HELPERS ---
 
 fun isNotificationServiceEnabled(context: Context): Boolean {
     val pkgName = context.packageName
@@ -275,31 +337,35 @@ fun isNotificationServiceEnabled(context: Context): Boolean {
     return flat != null && flat.contains(pkgName)
 }
 
+fun isPostNotificationsEnabled(context: Context): Boolean {
+    return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    } else true
+}
+
 fun openAutoStartSettings(context: Context) {
     try {
-        val intent = Intent()
-        intent.component = ComponentName(
-            "com.miui.securitycenter",
-            "com.miui.permcenter.autostart.AutoStartManagementActivity"
-        )
+        val intent = Intent().apply {
+            component = ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")
+        }
         context.startActivity(intent)
     } catch (e: Exception) {
-        Toast.makeText(context, "Autostart settings not found", Toast.LENGTH_SHORT).show()
+        try {
+            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+        } catch (e2: Exception) {
+            Toast.makeText(context, "Settings not found", Toast.LENGTH_SHORT).show()
+        }
     }
 }
 
 fun openBatterySettings(context: Context) {
     try {
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-        intent.data = Uri.parse("package:${context.packageName}")
-        context.startActivity(intent)
+        context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")))
     } catch (e: Exception) {
         try {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-            intent.data = Uri.parse("package:${context.packageName}")
-            context.startActivity(intent)
+            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
         } catch (e2: Exception) {
-            Toast.makeText(context, "Could not open settings", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Settings not found", Toast.LENGTH_SHORT).show()
         }
     }
 }
