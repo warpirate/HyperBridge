@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  HyperBridge bridges standard Android notifications into the pill-shaped UI around the camera cutout, offering a seamless, iOS-like experience on Xiaomi phones.
+  Hyper Bridge bridges standard Android notifications into the pill-shaped UI around the camera cutout, offering a seamless, iOS-like experience on Xiaomi phones.
 </p>
 
 <p align="center">
