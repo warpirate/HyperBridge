@@ -12,6 +12,9 @@ import com.d4viddf.hyperbridge.models.IslandConfig
 import com.d4viddf.hyperbridge.models.IslandLimitMode
 import com.d4viddf.hyperbridge.models.NavContent
 import com.d4viddf.hyperbridge.models.NotificationType
+import com.d4viddf.hyperbridge.models.WidgetConfig
+import com.d4viddf.hyperbridge.models.WidgetRenderMode
+import com.d4viddf.hyperbridge.models.WidgetSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -20,7 +23,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-// We keep this ONLY for the one-time migration logic
 private val Context.legacyDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 class AppPreferences(context: Context) {
@@ -32,25 +34,19 @@ class AppPreferences(context: Context) {
         // --- MIGRATION LOGIC ---
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Check if migration already happened
                 val isMigrated = dao.getSetting(SettingsKeys.MIGRATION_COMPLETE) == "true"
-
                 if (!isMigrated) {
                     val legacyPrefs = legacyDataStore.data.first().asMap()
-
                     if (legacyPrefs.isNotEmpty()) {
                         legacyPrefs.forEach { (key, value) ->
                             val strValue = when (value) {
-                                is Set<*> -> value.joinToString(",") // Handle string sets
-                                else -> value.toString() // Handle Booleans, Longs, Ints
+                                is Set<*> -> value.joinToString(",")
+                                else -> value.toString()
                             }
                             dao.insert(AppSetting(key.name, strValue))
                         }
-                        // Clear legacy file to save space and avoid confusion
                         legacyDataStore.edit { it.clear() }
                     }
-
-                    // Mark as done so we don't run this again
                     dao.insert(AppSetting(SettingsKeys.MIGRATION_COMPLETE, "true"))
                 }
             } catch (e: Exception) {
@@ -59,7 +55,7 @@ class AppPreferences(context: Context) {
         }
     }
 
-    // --- HELPERS FOR ROOM ---
+    // --- HELPERS ---
     private fun String?.toBoolean(default: Boolean = false): Boolean = this?.toBooleanStrictOrNull() ?: default
     private fun String?.toInt(default: Int = 0): Int = this?.toIntOrNull() ?: default
     private fun String?.toLong(default: Long = 0L): Long = this?.toLongOrNull() ?: default
@@ -76,11 +72,9 @@ class AppPreferences(context: Context) {
         dao.delete(key)
     }
 
-    // --- CORE ---
+    // --- CORE SETTINGS ---
     val allowedPackagesFlow: Flow<Set<String>> = dao.getSettingFlow(SettingsKeys.ALLOWED_PACKAGES).map { it.deserializeSet() }
-
     val isSetupComplete: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.SETUP_COMPLETE).map { it.toBoolean(false) }
-
     val lastSeenVersion: Flow<Int> = dao.getSettingFlow(SettingsKeys.LAST_VERSION).map { it.toInt(0) }
     val isPriorityEduShown: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.PRIORITY_EDU).map { it.toBoolean(false) }
 
@@ -95,7 +89,27 @@ class AppPreferences(context: Context) {
         save(SettingsKeys.ALLOWED_PACKAGES, newSet.serialize())
     }
 
-    // --- LIMITS ---
+    // ========================================================================
+    //                        THEME ENGINE (NEW)
+    // ========================================================================
+
+    /**
+     * Holds the ID (folder name) of the currently active theme.
+     * Null means the system default (no theme).
+     */
+    val activeThemeIdFlow: Flow<String?> = dao.getSettingFlow("active_theme_id")
+
+    suspend fun setActiveThemeId(id: String?) {
+        if (id == null) {
+            remove("active_theme_id")
+        } else {
+            save("active_theme_id", id)
+        }
+    }
+
+    // ========================================================================
+
+    // --- LIMITS & PRIORITY ---
     val limitModeFlow: Flow<IslandLimitMode> = dao.getSettingFlow("limit_mode").map {
         try { IslandLimitMode.valueOf(it ?: IslandLimitMode.MOST_RECENT.name) } catch(e: Exception) { IslandLimitMode.MOST_RECENT }
     }
@@ -104,16 +118,8 @@ class AppPreferences(context: Context) {
     suspend fun setLimitMode(mode: IslandLimitMode) = save("limit_mode", mode.name)
     suspend fun setAppPriorityOrder(order: List<String>) = save(SettingsKeys.PRIORITY_ORDER, order.joinToString(","))
 
-    // --- TYPE CONFIG ---
+    // --- NOTIFICATION TYPES ---
     fun getAppConfig(packageName: String): Flow<Set<String>> {
-        val key = "config_${packageName}_types" // Mapped from old "config_pkg" logic
-        // Check if migration might have saved it as just "config_pkg" (without _types)
-        // The migration logic used key.name, so if old key was "config_com.whatsapp", it stays that way.
-        // Wait, in DataStore implementation: stringSetPreferencesKey("config_$packageName")
-        // So the key name IS "config_com.whatsapp".
-        // But here for clarity, let's try to stick to that naming convention or migrate gracefully.
-        // Since the migration copies key names exactly, we should reuse the exact old key name structure
-        // which was: "config_$packageName"
         val legacyKey = "config_$packageName"
         return dao.getSettingFlow(legacyKey).map { str ->
             str?.deserializeSet() ?: NotificationType.entries.map { t -> t.name }.toSet()
@@ -128,7 +134,7 @@ class AppPreferences(context: Context) {
         save(key, newSet.serialize())
     }
 
-    // --- ISLAND CONFIG ---
+    // --- ISLAND CONFIG (Standard Notifications) ---
     private fun sanitizeTimeout(raw: Long?): Long {
         val value = raw ?: 5L
         return if (value > 60) value / 1000 else value
@@ -139,11 +145,7 @@ class AppPreferences(context: Context) {
         dao.getSettingFlow(SettingsKeys.GLOBAL_SHADE),
         dao.getSettingFlow(SettingsKeys.GLOBAL_TIMEOUT)
     ) { f, s, t ->
-        IslandConfig(
-            f.toBoolean(true),
-            s.toBoolean(true),
-            sanitizeTimeout(t?.toLongOrNull())
-        )
+        IslandConfig(f.toBoolean(true), s.toBoolean(true), t?.toIntOrNull())
     }
 
     suspend fun updateGlobalConfig(config: IslandConfig) {
@@ -153,8 +155,6 @@ class AppPreferences(context: Context) {
     }
 
     fun getAppIslandConfig(packageName: String): Flow<IslandConfig> {
-        // Old keys were: config_{pkg}_float, etc.
-        // Migration preserves these names.
         return combine(
             dao.getSettingFlow("config_${packageName}_float"),
             dao.getSettingFlow("config_${packageName}_shade"),
@@ -163,7 +163,7 @@ class AppPreferences(context: Context) {
             IslandConfig(
                 f?.toBoolean(),
                 s?.toBoolean(),
-                if (t != null) sanitizeTimeout(t.toLong()) else null
+                t?.toIntOrNull()
             )
         }
     }
@@ -178,21 +178,17 @@ class AppPreferences(context: Context) {
         if (config.timeout != null) save(tKey, config.timeout.toString()) else remove(tKey)
     }
 
-    // --- NAVIGATION & BLOCKED TERMS ---
-
+    // --- NAVIGATION ---
     val globalBlockedTermsFlow: Flow<Set<String>> = dao.getSettingFlow(SettingsKeys.GLOBAL_BLOCKED_TERMS).map { it.deserializeSet() }
-
     suspend fun setGlobalBlockedTerms(terms: Set<String>) = save(SettingsKeys.GLOBAL_BLOCKED_TERMS, terms.serialize())
 
     fun getAppBlockedTerms(packageName: String): Flow<Set<String>> {
         return dao.getSettingFlow("config_${packageName}_blocked").map { it.deserializeSet() }
     }
-
     suspend fun setAppBlockedTerms(packageName: String, terms: Set<String>) {
         save("config_${packageName}_blocked", terms.serialize())
     }
 
-    // Navigation
     val globalNavLayoutFlow: Flow<Pair<NavContent, NavContent>> = combine(
         dao.getSettingFlow(SettingsKeys.NAV_LEFT),
         dao.getSettingFlow(SettingsKeys.NAV_RIGHT)
@@ -219,8 +215,14 @@ class AppPreferences(context: Context) {
     }
 
     fun getEffectiveNavLayout(packageName: String): Flow<Pair<NavContent, NavContent>> {
-        return combine(getAppNavLayout(packageName), globalNavLayoutFlow) { app, global ->
-            (app.first ?: global.first) to (app.second ?: global.second)
+        return combine(
+            dao.getSettingFlow("config_${packageName}_nav_left"),
+            dao.getSettingFlow("config_${packageName}_nav_right"),
+            globalNavLayoutFlow
+        ) { appL, appR, global ->
+            val left = appL?.let { try { NavContent.valueOf(it) } catch(e: Exception){null} } ?: global.first
+            val right = appR?.let { try { NavContent.valueOf(it) } catch(e: Exception){null} } ?: global.second
+            left to right
         }
     }
 
@@ -229,5 +231,88 @@ class AppPreferences(context: Context) {
         val rKey = "config_${packageName}_nav_right"
         if (left != null) save(lKey, left.name) else remove(lKey)
         if (right != null) save(rKey, right.name) else remove(rKey)
+    }
+
+    // ========================================================================
+    //                         WIDGET CONFIGURATION
+    // ========================================================================
+
+    private val WIDGET_IDS_DB_KEY = "saved_widget_ids_list"
+
+    /**
+     * Provides a Flow of all currently saved Widget IDs.
+     */
+    val savedWidgetIdsFlow: Flow<List<Int>> = dao.getSettingFlow(WIDGET_IDS_DB_KEY).map { str ->
+        str?.split(",")?.mapNotNull { it.toIntOrNull() } ?: emptyList()
+    }
+
+    /**
+     * Gets configuration specific to a single Widget ID.
+     * Returns the clean WidgetConfig class.
+     */
+    fun getWidgetConfigFlow(id: Int): Flow<WidgetConfig> {
+        // [FIX] 'combine' only supports up to 5 args nicely. For 6+, it returns an Array<T>.
+        return combine(
+            dao.getSettingFlow("widget_${id}_shown"),
+            dao.getSettingFlow("widget_${id}_timeout"),
+            dao.getSettingFlow("widget_${id}_size"),
+            dao.getSettingFlow("widget_${id}_mode"),
+            dao.getSettingFlow("widget_${id}_auto_update"),
+            dao.getSettingFlow("widget_${id}_update_interval")
+        ) { args: Array<String?> ->
+            // Manually unpack the array
+            val shown = args[0]
+            val timeout = args[1]
+            val sizeStr = args[2]
+            val modeStr = args[3]
+            val autoStr = args[4]
+            val intervalStr = args[5]
+
+            val sizeEnum = try { WidgetSize.valueOf(sizeStr ?: WidgetSize.MEDIUM.name) } catch (e: Exception) { WidgetSize.MEDIUM }
+            val modeEnum = try { WidgetRenderMode.valueOf(modeStr ?: WidgetRenderMode.INTERACTIVE.name) } catch (e: Exception) { WidgetRenderMode.INTERACTIVE }
+
+            WidgetConfig(
+                isShowShade = shown.toBoolean(true),
+                timeout = timeout.toInt(5),
+                size = sizeEnum,
+                renderMode = modeEnum,
+                autoUpdate = autoStr.toBoolean(false),
+                updateIntervalMinutes = intervalStr.toInt(15)
+            )
+        }
+    }
+
+    /**
+     * Saves configuration for a specific widget ID.
+     */
+    suspend fun saveWidgetConfig(
+        id: Int,
+        config: WidgetConfig
+    ) {
+        val currentStr = dao.getSetting(WIDGET_IDS_DB_KEY) ?: ""
+        val currentIds = currentStr.split(",").filter { it.isNotEmpty() }.toMutableSet()
+        currentIds.add(id.toString())
+        save(WIDGET_IDS_DB_KEY, currentIds.joinToString(","))
+
+        save("widget_${id}_shown", config.isShowShade.toString())
+        save("widget_${id}_timeout", config.timeout.toString())
+        save("widget_${id}_size", config.size.name)
+        save("widget_${id}_mode", config.renderMode.name)
+        save("widget_${id}_auto_update", config.autoUpdate.toString())
+        save("widget_${id}_update_interval", config.updateIntervalMinutes.toString())
+    }
+
+    suspend fun removeWidgetId(id: Int) {
+        val currentStr = dao.getSetting(WIDGET_IDS_DB_KEY) ?: ""
+        val currentIds = currentStr.split(",").filter { it.isNotEmpty() }.toMutableList()
+        currentIds.remove(id.toString())
+        save(WIDGET_IDS_DB_KEY, currentIds.joinToString(","))
+
+        dao.delete("widget_${id}_shown")
+        dao.delete("widget_${id}_timeout")
+        dao.delete("widget_${id}_size")
+        dao.delete("widget_${id}_mode")
+        dao.delete("widget_${id}_auto_update")
+        dao.delete("widget_${id}_update_interval")
     }
 }

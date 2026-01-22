@@ -46,7 +46,7 @@
     <string name="tab_library">Library</string>
     <string name="title_active_bridges">Active Bridges</string>
     <string name="title_library">App Library</string>
-    <string name="search_hint">Search apps...</string>
+    <string name="search_hint">Search apps…</string>
     <string name="sort_az">Sort: A-Z</string>
     <string name="sort_za">Sort: Z-A</string>
 
@@ -120,15 +120,11 @@
         <item>done</item>
         <item>successful</item>
         <item>succeeded</item>
-        <item>completado</item>
-        <item>finalizado</item>
-        <item>exitoso</item>
-        <item>instalado</item>
     </string-array>
 
     <string name="status_download_complete">Download Complete</string>
     <string name="status_downloading">Downloading</string>
-    <string name="status_pending">Pending...</string>
+    <string name="status_pending">Pending…</string>
     <string name="status_finished">Finished</string>
     <string name="status_now_playing">Now Playing</string>
     <string name="status_incoming_call">Incoming Call</string>
@@ -163,9 +159,9 @@
     <string name="setting_float_desc">Show the full notification banner briefly before minimizing to the Island.</string>
 
     <string name="setting_shade">Notification Panel</string>
-    <string name="setting_shade_desc">Keep the notification visible in the system shade. If disabled, it only appears as an Island.</string>
+    <string name="setting_shade_desc">Keep the notification visible in the notification panel. If disabled, it only appears as an Island.</string>
 
-    <string name="setting_timeout">Auto-Minimize Delay</string>
+    <string name="setting_timeout">Auto-Close delay</string>
     <string name="seconds_suffix">%ds</string>
 
     <string name="use_global_default">Use Global Defaults</string>
@@ -247,7 +243,7 @@
 
     <string name="blocked_terms">Blocked Terms</string>
     <string name="blocked_terms_desc">Notifications containing these words will be ignored.</string>
-    <string name="add_blocked_word">Add word (e.g. \'Spoiler\')</string>
+    <string name="add_blocked_word">Add word (e.g. Spoiler)</string>
     <string name="add">Add</string>
     <string name="remove">Remove</string>
     <string name="tap_to_configure_rules">Tap an app to configure specific block rules.</string>
@@ -388,5 +384,270 @@
         • Fixed a critical issue where settings were lost after device reboot (migrated to database).\n
         • Fixed "Exit" button in Navigation island showing as an icon instead of text.\n
         • Fixed App Icon loading in Settings.\n
+    </string>
+
+    <string name="close">Close</string>
+    <string name="search">Search</string>
+    <string name="widget_updated_toast">Widget updated</string>
+    <string name="widget_settings_error">Cannot edit this widget settings</string>
+
+    <string name="widget_picker_title">Add Widget</string>
+    <string name="search_apps_placeholder">Search apps...</string>
+    <plurals name="widget_count_fmt">
+        <item quantity="many">%d widgets</item>
+        <item quantity="other">%d widgets</item>
+        <item quantity="one">%d widget</item>
+    </plurals>
+
+    <string name="widget_config_title">Configure Widget</string>
+    <string name="widget_settings_button">Widget Settings</string>
+
+    <string name="config_tab_appearance">Appearance</string>
+    <string name="config_tab_behavior">Behavior</string>
+
+    <string name="config_render_mode_label">Render Mode</string>
+    <string name="config_container_size_label">Container Size</string>
+
+    <string name="config_shade_title">Show in Shade</string>
+    <string name="config_shade_desc">Visible in notification panel</string>
+
+    <string name="config_timeout_title">Auto Close</string>
+    <string name="config_timeout_desc">Close island after delay</string>
+    <plurals name="config_timeout_fmt">
+        <item quantity="many">%d seconds</item>
+        <item quantity="other">%d seconds</item>
+        <item quantity="one">%d second</item>
+    </plurals>
+
+    <string name="config_refresh_title">Auto Refresh</string>
+    <string name="config_refresh_desc">Update snapshot periodically</string>
+¡    <plurals name="config_refresh_fmt">
+        <item quantity="many">Every %d minutes</item>
+    <item quantity="other">Every %d minutes</item>
+    <item quantity="one">Every minute</item>
+    </plurals>
+    <string name="config_refresh_warning">Higher frequency uses more battery.</string>
+
+    <string name="render_interactive_label">Interactive</string>
+    <string name="render_interactive_desc">Buttons work. Best for Music, Controls.</string>
+    <string name="render_snapshot_label">Snapshot</string>
+    <string name="render_snapshot_desc">Fixes empty lists. Best for Calendar, Gmail.</string>
+
+    <string name="size_original">Original</string>
+    <string name="size_small">Small (100dp)</string>
+    <string name="size_medium">Medium (180dp)</string>
+    <string name="size_large">Large (280dp)</string>
+    <string name="size_xlarge">Extra Large (380dp)</string>
+
+    <string name="app_uninstalled_badge">Uninstalled</string>
+    <string name="settings_action">Settings</string>
+
+    <string name="saved_widgets_title">Saved Widgets</string>
+    <string name="new_widget_fab">New Widget</string>
+    <string name="no_saved_widgets">No saved widgets found.</string>
+    <string name="widget_id_fmt">Widget #%d</string>
+    <string name="show_on_island">Show on Island</string>
+
+    <string name="theme_installer_title">Import Theme</string>
+    <string name="theme_installer_analyzing">Analyzing theme package...</string>
+    <string name="theme_installer_success_title">Theme Ready</string>
+    <string name="theme_installer_author">Created by %s</string>
+    <string name="theme_installer_version">Version %d</string>
+    <string name="theme_installer_description_default">No description provided.</string>
+    <string name="theme_installer_apply_question">Do you want to apply this theme to HyperBridge now?</string>
+    <string name="theme_installer_action_apply">Apply Theme</string>
+    <string name="theme_installer_action_later">Save for Later</string>
+    <string name="theme_installer_error_title">Import Failed</string>
+    <string name="theme_installer_error_generic">Could not verify the theme file.</string>
+    <string name="theme_installer_btn_close">Close</string>
+    <string name="theme_manager_title">My Themes</string>
+    <string name="theme_manager_cd_back">Navigate Back</string>
+    <string name="theme_manager_cd_add">Add New Theme</string>
+
+    <string name="theme_card_author_format">by %s</string>
+    <string name="theme_card_cd_active">Active Theme</string>
+    <string name="theme_card_cd_delete">Delete Theme</string>
+
+    <string name="theme_system_default_title">System Default</string>
+    <string name="theme_system_default_desc">Standard Look</string>
+
+    <string name="theme_sheet_title">Add New Theme</string>
+    <string name="creator_title">New Theme</string>
+    <string name="creator_label_name">Theme Name</string>
+    <string name="creator_label_author">Author Name</string>
+    <string name="creator_label_color">Highlight Color</string>
+    <string name="creator_preview">Preview</string>
+    <string name="creator_btn_save">Save Theme</string>
+    <string name="creator_err_inputs">Please enter a name and author</string>
+
+    <string name="theme_sheet_action_create">Create New Theme</string>
+    <string name="theme_sheet_action_find">Search</string>
+    <string name="theme_sheet_action_import">Import from File</string>
+    <string name="theme_action_import_short">Import</string>
+    <string name="theme_card_action_edit">Edit</string>
+    <string name="theme_card_action_export">Export</string>
+
+    <string name="creator_title_new">Create Theme</string>
+    <string name="creator_title_edit">Edit Theme</string>
+    <string name="creator_nav_colors">Colors</string>
+    <string name="creator_nav_icons">Icons &amp; Shapes</string>
+    <string name="creator_nav_calls">Call Style</string>
+    <string name="creator_nav_apps">App Config</string>
+    <string name="creator_action_save">Save</string>
+    <string name="creator_btn_edit_info">Edit Theme Info</string>
+    <string name="creator_sub_colors">Palettes &amp; contrast</string>
+    <string name="creator_sub_icons">Shape &amp; padding</string>
+    <string name="creator_sub_calls">Answer &amp; decline buttons</string>
+    <string name="creator_sub_apps">Per-app overrides</string>
+
+    <string name="meta_title">Theme Info</string>
+    <string name="meta_label_name">Theme Name</string>
+    <string name="meta_label_author">Author Name</string>
+    <string name="meta_action_done">Done</string>
+
+    <string name="colors_tab_presets">Presets</string>
+    <string name="colors_tab_custom">Custom</string>
+    <string name="colors_label_presets">Presets</string>
+    <string name="colors_label_use_app_colors">Use App Colors</string>
+    <string name="colors_desc_use_app_colors">Adapt colors from installed apps</string>
+    <string name="colors_label_custom_title">Custom Color</string>
+    <string name="colors_cd_add_custom">Add Custom Color</string>
+    <string name="colors_dialog_title">Pick a Color</string>
+    <string name="colors_dialog_desc">Select a custom color for your theme.</string>
+    <string name="colors_label_hex">Hex Code</string>
+    <string name="colors_action_done">Done</string>
+
+    <string name="icons_tab_style">Style</string>
+    <string name="icons_tab_assets">Icons</string>
+    <string name="icons_tab_shape">Shape</string>
+    <string name="icons_label_size">Icon Size</string>
+    <string name="icons_label_full">Full</string>
+    <string name="icons_label_minimal">Minimal</string>
+    <string name="icons_group_nav">Navigation</string>
+    <string name="icons_btn_start">Start</string>
+    <string name="icons_btn_end">End</string>
+    <string name="icons_group_progress">Progress</string>
+    <string name="icons_btn_success">Success</string>
+    <string name="icons_label_shape_title">Icon Shape</string>
+
+    <string name="shape_circle">Circle</string>
+    <string name="shape_square">Square</string>
+    <string name="shape_cookie">Cookie</string>
+    <string name="shape_arch">Arch</string>
+    <string name="shape_clover">Clover</string>
+
+    <string name="calls_label_answer">Answer</string>
+    <string name="calls_label_decline">Decline</string>
+    <string name="calls_label_hex">Hex Color</string>
+
+    <string name="apps_title">Configured Apps</string>
+    <string name="apps_empty">No apps configured</string>
+    <string name="apps_sheet_title">Configure App</string>
+    <string name="apps_label_select">Select App</string>
+    <string name="apps_label_app">App</string>
+    <string name="apps_label_highlight">Highlight Color (Hex)</string>
+    <string name="apps_group_actions">Custom Actions</string>
+    <string name="apps_label_keyword">Keyword</string>
+    <string name="apps_desc_button_contains">Button containing \'%s\'</string>
+    <string name="apps_action_save">Save Configuration</string>
+    <string name="apps_default_color">Default Color</string>
+    <plurals name="apps_action_count">
+        <item quantity="many">%d actions</item>
+        <item quantity="other">%d actions</item>
+        <item quantity="one">%d action</item>
+    </plurals>
+
+    <string name="design_hero_customization_title">Customization</string>
+    <string name="design_hero_customization_subtitle">Learn how to create themes</string>
+    <string name="design_hero_pro_title">Pro Features</string>
+    <string name="design_hero_pro_subtitle">Unlock more power</string>
+    <string name="design_hero_community_title">Community</string>
+    <string name="design_hero_community_subtitle">Join our GitHub</string>
+
+    <string name="design_section_themes">Themes</string>
+    <string name="design_section_widgets">Widgets</string>
+
+    <string name="design_browse_more">Browse More</string>
+    <string name="design_add_new">Add New</string>
+    <string name="design_add_design">Add Design</string>
+    <string name="design_add_to_island">Customization</string>
+    <string name="design_system_widget_beta">System Widget (Beta)</string>
+    <string name="design_get_themes">Get Themes</string>
+    <string name="design_empty_widget_title">Add your first Widget</string>
+    <string name="design_active_count">%d Active</string>
+    <string name="design">Design</string>
+
+    <string name="creator_nav_actions">Global Actions</string>
+    <string name="creator_sub_actions">Style buttons by keyword</string>
+    <string name="action_sheet_title">Configure Action</string>
+    <string name="action_label_keyword">Keyword (e.g. \'Reply\')</string>
+    <string name="action_label_bg_color">Background Color</string>
+    <string name="action_label_tint_color">Icon/Text Color</string>
+    <string name="action_preview">Live Preview</string>
+    <string name="action_mode_icon">Icon Only</string>
+    <string name="action_mode_text">Text</string>
+    <string name="action_mode_both">Both</string>
+    <string name="actions_empty_title">No Custom Actions</string>
+    <string name="actions_empty_desc">Add rules to style notification buttons based on their text (e.g., "Reply", "Archive").</string>
+    <string name="action_default_preview_text">Action</string>
+
+    <string name="actions_search_hint">Search actions...</string>
+    <string name="actions_search_empty_fmt">No actions found for "%1$s"</string>
+
+    <string name="action_wip_warning">This feature is a Work in Progress. Keyword matching depends on how apps structure their notifications and may not work for every app.</string>
+    <string name="creator_dialog_apply_title">Apply Theme?</string>
+    <string name="creator_dialog_apply_desc">Do you want to apply this theme now?</string>
+    <string name="creator_dialog_action_save_apply">Save &amp; Apply</string>
+    <string name="creator_dialog_action_save_only">Save Only</string>
+    <string name="select_icon">Select Icon</string>
+    <string name="change_icon">Change Icon</string>
+    <string name="action_add">Add App</string>
+    <string name="apps_sheet_select_title">Select App</string>
+    <string name="edit_app">Edit App</string>
+
+    <string name="creator_sub_colors_custom">Custom Color Set</string>
+    <string name="creator_sub_colors_default">Using Global Default</string>
+
+    <string name="creator_sub_icons_custom">Custom Shape Set</string>
+    <string name="creator_sub_icons_default">Using Global Default</string>
+    <string name="app_customization_desc">Add an app to customize its look specifically.</string>
+    <string name="discard">Discard</string>
+    <string name="unsaved_changes">Unsaved Changes</string>
+    <string name="unsaved_changes_desc">You have unsaved changes for this app. Do you want to save them before exiting?</string>
+    <string name="share_theme">Share Theme</string>
+    <string name="my_theme">My Theme</string>
+    <plurals name="creator_sub_actions_count">
+        <item quantity="one">%1$d custom action</item>
+        <item quantity="other">%1$d custom actions</item>
+        <item quantity="many">%1$d custom actions</item>
+
+    </plurals>
+
+    <string name="title_0_4_0">The Customization Update</string>
+    <string name="changelog_0_4_0">
+        <b>Theme Engine 🎨</b>\n
+        The biggest update yet! You can now fully customize the Dynamic Island visual experience.\n
+        • <b>Theme Creator:</b> Design themes directly on your phone with real-time previews.\n
+        • <b>Granular Control:</b> Choose exactly how icons are shown, customize call notification colors and shapes, and configure individual app overrides.\n
+        • <b>Smart Colors:</b> Automatically extract vibrant brand colors from app icons.\n
+        • <b>Per-Action Customization (Beta):</b> Fine-tune the look of specific notification actions.\n
+        • <b>Sharing:</b> Export and import themes as portable <i>.hbr</i> packages.\n\n
+
+        <b>Widget Support 🧩</b>\n
+        Pin standard Android widgets to the island for quick access—even on your <b>Lockscreen</b>!\n
+        • Choose between <b>Interactive</b> mode for speed or <b>Snapshot</b> mode for battery efficiency.\n\n
+
+        <b>Notification Engine 2.0 ⚡</b>\n
+        A complete rewrite of the core logic for better stability:\n
+        • <b>Smarter Parsing:</b> Fixed issues where notifications showed package names (e.g., com.whatsapp) instead of message content.\n
+        • <b>Anti-Flicker:</b> New content hashing prevents redundant updates and stuttering.\n
+        • <b>Ghost Fixes:</b> Solved race conditions where islands lingered after dismissal.\n\n
+
+        <b>Visual Refresh ✨</b>\n
+        • Redesigned "Design" tab with fluid, native-feeling carousels.\n
+        • New "Text Pill" buttons for clearer notification actions.\n
+        • Added support for 🇮🇩 Indonesian and 🇹🇷 Turkish.\n\n
+
+        <i>Note: This release includes significant architectural changes. Please report any bugs on GitHub!</i>
     </string>
 </resources>
