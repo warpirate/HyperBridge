@@ -1,3 +1,4 @@
+---
 name: 🐛 Bug Report
 description: Create a report to help us improve HyperBridge
 title: "[BUG] "
@@ -27,7 +28,7 @@ body:
     id: os_version
     attributes:
       label: OS Version
-      description: Which version of HyperOS are you on? (Min: 3.0)
+      description: Which version of HyperOS are you on? (Min 3.0)
       placeholder: e.g. HyperOS 3.0.1.0
     validations:
       required: true
@@ -47,9 +48,7 @@ body:
     id: app_version
     attributes:
       label: App Version
-      description: |
-        Which version of HyperBridge is causing the issue?
-        You can find the list of tags here: https://github.com/D4vidDf/HyperBridge/tags
+      description: "Which version is causing the issue? (Check tags: https://github.com/D4vidDf/HyperBridge/tags)"
       options:
         - v0.4.0 (Stable)
         - v0.4.0-rc1
@@ -83,8 +82,7 @@ body:
     id: logs
     attributes:
       label: Crash Logs (Logcat)
-      description: |
-        If the app crashed, these logs are vital.
+      description: "If the app crashed, these logs are vital."
       render: shell
       placeholder: |
         java.lang.NullPointerException: ...
@@ -108,3 +106,4 @@ body:
           required: true
         - label: I have granted all required permissions (Notification Access, Autostart).
           required: false
+---
