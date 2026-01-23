@@ -1,110 +1,65 @@
-name: 🐛 Bug Report
-description: Create a report to help us improve HyperBridge
-title: "[BUG] "
-labels: ["type: bug"]
+name: Bug Report
+description: File a bug report.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+projects: ["octo-org/1", "octo-org/44"]
 assignees:
-  - D4vidDf
+  - octocat
+type: bug
 body:
   - type: markdown
     attributes:
       value: |
         Thanks for taking the time to fill out this bug report!
-        
-        **Note:** Please verify you are using a supported version.
-        - **Android:** 15 or 16
-        - **HyperOS:** 3.0+
-
   - type: input
-    id: device
+    id: contact
     attributes:
-      label: Device Model
-      description: Which phone are you using?
-      placeholder: e.g. Xiaomi 15, POCO F7
+      label: Contact Details
+      description: How can we get in touch with you if we need more info?
+      placeholder: ex. email@example.com
     validations:
-      required: true
-
-  - type: input
-    id: os_version
-    attributes:
-      label: OS Version
-      description: Which version of HyperOS are you on? (Min: 3.0)
-      placeholder: e.g. HyperOS 3.0.1.0
-    validations:
-      required: true
-
-  - type: dropdown
-    id: android_version
-    attributes:
-      label: Android Version
-      options:
-        - Android 16
-        - Android 15
-        - Other
-    validations:
-      required: true
-
-  - type: dropdown
-    id: app_version
-    attributes:
-      label: App Version
-      description: |
-        Which version of HyperBridge is causing the issue?
-        You can find the list of tags here: https://github.com/D4vidDf/HyperBridge/tags
-      options:
-        - v0.4.0 (Stable)
-        - v0.4.0-rc1
-        - Dev Build (Please specify in description)
-        - Other
-    validations:
-      required: true
-
+      required: false
   - type: textarea
-    id: description
+    id: what-happened
     attributes:
-      label: Describe the Bug
-      description: A clear and concise description of what the bug is.
-      placeholder: The widget overlay flickers when...
+      label: What happened?
+      description: Also tell us, what did you expect to happen?
+      placeholder: Tell us what you see!
+      value: "A bug happened!"
     validations:
       required: true
-
-  - type: textarea
-    id: steps
+  - type: dropdown
+    id: version
     attributes:
-      label: Steps to Reproduce
-      description: How can we make this happen on our devices?
-      placeholder: |
-        1. Go to 'Settings'
-        2. Click on 'Design'
-        3. ...
+      label: Version
+      description: What version of our software are you running?
+      options:
+        - 1.0.2 (Default)
+        - 1.0.3 (Edge)
+      default: 0
     validations:
       required: true
-
+  - type: dropdown
+    id: browsers
+    attributes:
+      label: What browsers are you seeing the problem on?
+      multiple: true
+      options:
+        - Firefox
+        - Chrome
+        - Safari
+        - Microsoft Edge
   - type: textarea
     id: logs
     attributes:
-      label: Crash Logs (Logcat)
-      description: |
-        If the app crashed, these logs are vital.
+      label: Relevant log output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
       render: shell
-      placeholder: |
-        java.lang.NullPointerException: ...
-    validations:
-      required: false
-
-  - type: textarea
-    id: screenshots
-    attributes:
-      label: Screenshots / Screen Recording
-      description: You can drag and drop images or videos directly into this box.
-    validations:
-      required: false
-
   - type: checkboxes
     id: terms
     attributes:
-      label: Checklist
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://example.com).
       options:
-        - label: I have checked that this issue has not already been reported.
+        - label: I agree to follow this project's Code of Conduct
           required: true
-        - label: I have granted all required permissions (Notification Access, Autostart).
-          required: false
