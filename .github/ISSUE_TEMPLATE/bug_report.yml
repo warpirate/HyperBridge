@@ -2,7 +2,7 @@
 name: 🐛 Bug Report
 description: Create a report to help us improve HyperBridge
 title: "[BUG] "
-labels: ["type: bug"]
+labels: ["bug"]
 assignees:
   - D4vidDf
 body:
