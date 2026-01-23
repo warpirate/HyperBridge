@@ -1,6 +1,6 @@
 ---
 name: 🐛 Bug Report
-about: Create a report to help us improve HyperBridge
+description: Create a report to help us improve HyperBridge
 title: "[BUG] "
 labels: ["type: bug"]
 assignees:
