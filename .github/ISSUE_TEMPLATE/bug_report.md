@@ -2,9 +2,11 @@
 name: "\U0001F41B Bug Report"
 about: Create a report to help us improve HyperBridge
 title: "[BUG] "
-labels: ["type: bug"]
-assignees:
-  - D4vidDf
+labels: ''
+assignees: D4vidDf
+
+---
+
 body:
   - type: markdown
     attributes:
@@ -106,6 +108,3 @@ body:
           required: true
         - label: I have granted all required permissions (Notification Access, Autostart).
           required: false
----
-
-
