@@ -5,6 +5,7 @@ title: "[BUG] "
 labels: ["bug"]
 assignees:
   - D4vidDf
+projects: "D4vidDf/8"
 body:
   - type: markdown
     attributes:
