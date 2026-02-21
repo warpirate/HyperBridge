@@ -13,7 +13,7 @@
     <string name="sort_order">Sort Order</string>
 
     <string name="welcome_title">Welcome to\nHyper Bridge</string>
-    <string name="welcome_subtitle">Seamlessly integrate HyperIslands into your HyperOS experience.</string>
+    <string name="welcome_subtitle">Bring dynamic islands to any Android phone. HyperOS devices get native rendering.</string>
     <string name="get_started">Get Started</string>
 
     <string name="how_it_works">How it Works</string>
@@ -23,22 +23,26 @@
 
     <string name="device_compatible">Device Compatible</string>
     <string name="unsupported_device">Unsupported Device</string>
-    <string name="compatible_msg">Your device appears to be running HyperOS/MIUI. You are good to go!</string>
+    <string name="compatible_msg">Native HyperOS mode is available on this device.</string>
+    <string name="compatible_universal_msg">Universal overlay mode is available on this device.</string>
     <string name="incompatible_msg">HyperBridge relies on specific HyperOS system features. Your device manufacturer does not appear to be Xiaomi/POCO/Redmi.</string>
     <string name="system_detected">✅ System Detected</string>
     <string name="app_wont_work">⚠️ App may not work</string>
 
     <string name="show_island">Show Island</string>
     <string name="perm_post_desc">We need permission to post the \'Island\' notification on your screen.</string>
+    <string name="perm_post_overlay_desc">Allow notifications and overlay access to display islands on any Android device.</string>
     <string name="perm_granted">Permission Granted</string>
     <string name="allow_notifications">Allow Notifications</string>
+    <string name="allow_overlay">Allow Overlay</string>
+    <string name="overlay_permission_granted">Overlay Permission Granted</string>
 
     <string name="read_data">Read Data</string>
     <string name="perm_listener_desc">To bridge your apps, we need to read their notifications (Music, Maps, Timers).</string>
     <string name="open_settings">Open Settings</string>
 
     <string name="keep_alive">Keep Alive</string>
-    <string name="optimization_desc">HyperOS kills background apps. Enable Autostart and No Restrictions to keep the island active.</string>
+    <string name="optimization_desc">Some Android systems kill background apps. Enable autostart and unrestricted battery for stability.</string>
     <string name="enable_autostart">1. Enable Autostart</string>
     <string name="set_battery_no_restrictions">2. Set Battery \'No Restrictions\'</string>
 
@@ -77,8 +81,11 @@
     <string name="notif_access">Notification Access</string>
     <string name="notif_access_desc">Required to read app events</string>
     <string name="perm_display_desc">Permission to display over apps</string>
+    <string name="overlay_permission_title">Display Over Other Apps</string>
+    <string name="overlay_permission_desc">Required on non-HyperOS devices to render dynamic islands.</string>
     <string name="device_optimization">Device Optimization</string>
     <string name="xiaomi_autostart">Xiaomi Autostart</string>
+    <string name="autostart_generic">Autostart</string>
     <string name="autostart_desc">Allow app to start on boot</string>
     <string name="battery_unrestricted">Battery Unrestricted</string>
     <string name="battery_desc">Prevent system killing app</string>
@@ -154,6 +161,19 @@
     <string name="configure_order">Configure apps order</string>
 
     <string name="global_settings">Global Settings</string>
+    <string name="renderer_mode_title">Rendering Mode</string>
+    <string name="renderer_mode_desc">Choose how islands are rendered on your device.</string>
+    <string name="renderer_pref_auto">Auto (recommended)</string>
+    <string name="renderer_pref_native">Xiaomi Native</string>
+    <string name="renderer_pref_overlay">Universal Overlay</string>
+    <string name="lockscreen_overlay_title">Show on Lock Screen</string>
+    <string name="lockscreen_overlay_desc">Display overlay islands when the phone is locked.</string>
+    <string name="overlay_calibration_title">Overlay Calibration</string>
+    <string name="overlay_calibration_desc">Adjust island position for this posture.</string>
+    <string name="overlay_offset_x">Horizontal Offset: %d</string>
+    <string name="overlay_offset_y">Vertical Offset: %d</string>
+    <string name="overlay_width">Island Width: %ddp</string>
+    <string name="overlay_reset_profile">Reset Calibration</string>
     <string name="island_appearance">Island Appearance</string>
     <string name="setting_float">Heads-up Popup</string>
     <string name="setting_float_desc">Show the full notification banner briefly before minimizing to the Island.</string>
@@ -261,6 +281,11 @@
     <string name="no_active_rules">No active rules</string>
 
     <string name="setup_health_title">System Compatibility</string>
+    <string name="renderer_backend">Active Backend</string>
+    <string name="backend_auto_mode">Auto Selection</string>
+    <string name="backend_native_mode">Xiaomi Native (HyperOS)</string>
+    <string name="backend_overlay_mode">Universal Overlay</string>
+    <string name="backend_disabled_mode">No Renderer Available</string>
     <string name="check_device">Device: %s</string>
     <string name="check_os_version">OS: %s</string>
     <string name="req_hyperos">Requires HyperOS 3.0+ (Android 15+)</string>
@@ -276,6 +301,7 @@
     <string name="warning_cn_rom_desc">Your device appears to be running a Chinese firmware. Xiaomi modifies notification internals significantly on CN ROMs. Features might be unstable or not work at all.</string>
 
     <string name="system_version">System Version</string>
+    <string name="overlay_private_content">Content hidden on lock screen</string>
 
     <string name="call_incoming">Incoming Call</string>
     <string name="call_ongoing">Active Call</string>
@@ -392,6 +418,8 @@
     <string name="widget_settings_error">Cannot edit this widget settings</string>
 
     <string name="widget_picker_title">Add Widget</string>
+    <string name="widget_phase2_title">Widgets arrive in Phase 2</string>
+    <string name="widget_phase2_desc">Widget islands are currently available only on Xiaomi native mode.</string>
     <string name="search_apps_placeholder">Search apps...</string>
     <plurals name="widget_count_fmt">
         <item quantity="many">%d widgets</item>

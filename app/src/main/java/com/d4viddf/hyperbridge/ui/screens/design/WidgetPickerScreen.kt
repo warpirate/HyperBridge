@@ -44,7 +44,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.d4viddf.hyperbridge.R
+import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.data.widget.WidgetManager
+import com.d4viddf.hyperbridge.models.RenderBackend
+import com.d4viddf.hyperbridge.models.RendererPreference
+import com.d4viddf.hyperbridge.service.render.RenderBackendResolver
+import com.d4viddf.hyperbridge.ui.components.EmptyState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -64,6 +69,10 @@ fun WidgetPickerScreen(
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val preferences = remember { AppPreferences(context) }
+    val backendResolver = remember { RenderBackendResolver(context) }
+    val rendererPreference by preferences.rendererPreferenceFlow.collectAsState(initial = RendererPreference.AUTO)
+    val widgetSupported = backendResolver.resolve(rendererPreference) == RenderBackend.XIAOMI_NATIVE
 
     var allGroups by remember { mutableStateOf<List<WidgetAppGroup>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
@@ -80,7 +89,8 @@ fun WidgetPickerScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(widgetSupported) {
+        if (!widgetSupported) return@LaunchedEffect
         withContext(Dispatchers.IO) {
             val manager = AppWidgetManager.getInstance(context)
             val providers = manager.installedProviders
@@ -161,6 +171,20 @@ fun WidgetPickerScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
+            if (!widgetSupported) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EmptyState(
+                        title = stringResource(R.string.widget_phase2_title),
+                        description = stringResource(R.string.widget_phase2_desc),
+                        icon = Icons.Outlined.Widgets
+                    )
+                }
+                return@Column
+            }
+
             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 TextField(
                     value = searchQuery,

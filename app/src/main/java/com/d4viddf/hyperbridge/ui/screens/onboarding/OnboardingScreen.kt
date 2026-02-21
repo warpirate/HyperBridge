@@ -80,9 +80,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.d4viddf.hyperbridge.R
+import com.d4viddf.hyperbridge.util.DeviceCompatibility
 import com.d4viddf.hyperbridge.util.DeviceUtils
 import com.d4viddf.hyperbridge.util.isNotificationServiceEnabled
+import com.d4viddf.hyperbridge.util.isOverlayPermissionGranted
 import com.d4viddf.hyperbridge.util.isPostNotificationsEnabled
+import com.d4viddf.hyperbridge.util.openOverlayPermissionSettings
 import com.d4viddf.hyperbridge.util.toBitmap
 import kotlinx.coroutines.launch
 
@@ -102,11 +105,10 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     // --- Permissions State ---
     var isListenerGranted by remember { mutableStateOf(isNotificationServiceEnabled(context)) }
     var isPostGranted by remember { mutableStateOf(isPostNotificationsEnabled(context)) }
+    var isOverlayGranted by remember { mutableStateOf(isOverlayPermissionGranted(context)) }
 
     // --- Compatibility Logic ---
-    val isXiaomi = remember { DeviceUtils.isXiaomi }
-    val isCompatibleOS = remember { DeviceUtils.isCompatibleOS() }
-    val canProceedCompat = isXiaomi && isCompatibleOS
+    val isNativeSupported = remember { DeviceCompatibility.isXiaomiDevice(context) }
 
     // --- Permission Launcher ---
     val postPermissionLauncher = rememberLauncherForActivityResult(
@@ -121,6 +123,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
             if (event == Lifecycle.Event.ON_RESUME) {
                 isListenerGranted = isNotificationServiceEnabled(context)
                 isPostGranted = isPostNotificationsEnabled(context)
+                isOverlayGranted = isOverlayPermissionGranted(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -157,8 +160,8 @@ fun OnboardingScreen(onFinish: () -> Unit) {
 
                     // Blocking Logic
                     val canProceed = when (pagerState.currentPage) {
-                        3 -> canProceedCompat
-                        4 -> isPostGranted
+                        3 -> true
+                        4 -> isPostGranted && (isNativeSupported || isOverlayGranted)
                         5 -> isListenerGranted
                         else -> true
                     }
@@ -200,9 +203,12 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 3 -> CompatibilityPage()
                 4 -> PostPermissionPage(
                     isGranted = isPostGranted,
+                    isOverlayGranted = isOverlayGranted,
+                    requiresOverlay = !isNativeSupported,
                     onRequest = {
                         postPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
+                    },
+                    onRequestOverlay = { openOverlayPermissionSettings(context) }
                 )
                 5 -> ListenerPermissionPage(context, isListenerGranted)
                 6 -> OptimizationPage(context)
@@ -412,17 +418,17 @@ fun PrivacyPage() {
 
 @Composable
 fun CompatibilityPage() {
+    val context = LocalContext.current
     val isXiaomi = DeviceUtils.isXiaomi
-    val isCompatibleOS = DeviceUtils.isCompatibleOS()
     val isCN = DeviceUtils.isCNRom
-    val osVersion = DeviceUtils.getHyperOSVersion()
+    val isNativeSupported = DeviceCompatibility.isXiaomiDevice(context)
+    val osVersion = if (isXiaomi) DeviceUtils.getHyperOSVersion() else "Android ${Build.VERSION.RELEASE}"
     val deviceName = DeviceUtils.getDeviceMarketName()
 
-    val (icon, color, titleRes, descRes) = when {
-        !isXiaomi -> Quad(Icons.Default.Cancel, MaterialTheme.colorScheme.error, R.string.unsupported_device, R.string.req_xiaomi)
-        !isCompatibleOS -> Quad(Icons.Default.Cancel, MaterialTheme.colorScheme.error, R.string.unsupported_device, R.string.req_hyperos)
-        else -> Quad(Icons.Default.CheckCircle, Color(0xFF34C759), R.string.device_compatible, R.string.compatible_msg)
-    }
+    val icon = Icons.Default.CheckCircle
+    val color = Color(0xFF34C759)
+    val titleRes = R.string.device_compatible
+    val descRes = if (isNativeSupported) R.string.compatible_msg else R.string.compatible_universal_msg
 
     OnboardingPageLayout(
         title = stringResource(titleRes),
@@ -458,7 +464,7 @@ fun CompatibilityPage() {
             }
         }
 
-        if (isCN && isXiaomi) {
+        if (isCN && isXiaomi && isNativeSupported) {
             Spacer(modifier = Modifier.height(16.dp))
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), shape = RoundedCornerShape(24.dp)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -471,19 +477,25 @@ fun CompatibilityPage() {
     }
 }
 
-// Helper
-data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
-
 // --- 5. POST PERMISSION PAGE ---
 @Composable
-fun PostPermissionPage(isGranted: Boolean, onRequest: () -> Unit) {
+fun PostPermissionPage(
+    isGranted: Boolean,
+    isOverlayGranted: Boolean,
+    requiresOverlay: Boolean,
+    onRequest: () -> Unit,
+    onRequestOverlay: () -> Unit
+) {
     OnboardingPageLayout(
         title = stringResource(R.string.show_island),
-        description = stringResource(R.string.perm_post_desc),
-        icon = if (isGranted) Icons.Default.CheckCircle else Icons.Default.Notifications,
-        iconColor = if (isGranted) Color(0xFF34C759) else MaterialTheme.colorScheme.primary
+        description = if (requiresOverlay) {
+            stringResource(R.string.perm_post_overlay_desc)
+        } else {
+            stringResource(R.string.perm_post_desc)
+        },
+        icon = if (isGranted && (!requiresOverlay || isOverlayGranted)) Icons.Default.CheckCircle else Icons.Default.Notifications,
+        iconColor = if (isGranted && (!requiresOverlay || isOverlayGranted)) Color(0xFF34C759) else MaterialTheme.colorScheme.primary
     ) {
-        // FIX: Standard Button, Disabled when granted, Text changes, No Icon
         Button(
             onClick = { if (!isGranted) onRequest() },
             enabled = !isGranted,
@@ -497,6 +509,25 @@ fun PostPermissionPage(isGranted: Boolean, onRequest: () -> Unit) {
                 stringResource(if (isGranted) R.string.perm_granted else R.string.allow_notifications),
                 style = MaterialTheme.typography.titleMedium
             )
+        }
+
+        if (requiresOverlay) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onRequestOverlay,
+                enabled = !isOverlayGranted,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+            ) {
+                Text(
+                    stringResource(
+                        if (isOverlayGranted) R.string.overlay_permission_granted
+                        else R.string.allow_overlay
+                    ),
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
         }
     }
 }

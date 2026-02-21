@@ -12,6 +12,9 @@ import com.d4viddf.hyperbridge.models.IslandConfig
 import com.d4viddf.hyperbridge.models.IslandLimitMode
 import com.d4viddf.hyperbridge.models.NavContent
 import com.d4viddf.hyperbridge.models.NotificationType
+import com.d4viddf.hyperbridge.models.OverlayPostureKey
+import com.d4viddf.hyperbridge.models.OverlayProfile
+import com.d4viddf.hyperbridge.models.RendererPreference
 import com.d4viddf.hyperbridge.models.WidgetConfig
 import com.d4viddf.hyperbridge.models.WidgetRenderMode
 import com.d4viddf.hyperbridge.models.WidgetSize
@@ -63,6 +66,17 @@ class AppPreferences(context: Context) {
     private fun Set<String>.serialize(): String = this.joinToString(",")
     private fun String?.deserializeSet(): Set<String> = this?.split(",")?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
     private fun String?.deserializeList(): List<String> = this?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
+    private fun OverlayProfile.serialize(): String = "${offsetX}:${offsetY}:${widthDp}"
+    private fun String?.deserializeOverlayProfile(): OverlayProfile {
+        if (this.isNullOrBlank()) return OverlayProfile()
+        val parts = split(":")
+        if (parts.size < 3) return OverlayProfile()
+        return OverlayProfile(
+            offsetX = parts[0].toIntOrNull() ?: 0,
+            offsetY = parts[1].toIntOrNull() ?: 0,
+            widthDp = parts[2].toIntOrNull() ?: 300
+        )
+    }
 
     private suspend fun save(key: String, value: String) {
         dao.insert(AppSetting(key, value))
@@ -77,10 +91,37 @@ class AppPreferences(context: Context) {
     val isSetupComplete: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.SETUP_COMPLETE).map { it.toBoolean(false) }
     val lastSeenVersion: Flow<Int> = dao.getSettingFlow(SettingsKeys.LAST_VERSION).map { it.toInt(0) }
     val isPriorityEduShown: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.PRIORITY_EDU).map { it.toBoolean(false) }
+    val rendererPreferenceFlow: Flow<RendererPreference> = dao.getSettingFlow(SettingsKeys.RENDERER_PREFERENCE).map {
+        try {
+            RendererPreference.valueOf(it ?: RendererPreference.AUTO.name)
+        } catch (_: Exception) {
+            RendererPreference.AUTO
+        }
+    }
+    val overlayShowOnLockscreenFlow: Flow<Boolean> = dao.getSettingFlow(SettingsKeys.OVERLAY_SHOW_ON_LOCKSCREEN).map {
+        it.toBoolean(true)
+    }
 
     suspend fun setSetupComplete(isComplete: Boolean) = save(SettingsKeys.SETUP_COMPLETE, isComplete.toString())
     suspend fun setLastSeenVersion(versionCode: Int) = save(SettingsKeys.LAST_VERSION, versionCode.toString())
     suspend fun setPriorityEduShown(shown: Boolean) = save(SettingsKeys.PRIORITY_EDU, shown.toString())
+    suspend fun setRendererPreference(preference: RendererPreference) = save(SettingsKeys.RENDERER_PREFERENCE, preference.name)
+    suspend fun setOverlayShowOnLockscreen(show: Boolean) = save(SettingsKeys.OVERLAY_SHOW_ON_LOCKSCREEN, show.toString())
+
+    fun getOverlayProfileFlow(posture: OverlayPostureKey): Flow<OverlayProfile> {
+        val key = "${SettingsKeys.OVERLAY_PROFILE_PREFIX}${posture.key}"
+        return dao.getSettingFlow(key).map { it.deserializeOverlayProfile() }
+    }
+
+    suspend fun getOverlayProfile(posture: OverlayPostureKey): OverlayProfile {
+        val key = "${SettingsKeys.OVERLAY_PROFILE_PREFIX}${posture.key}"
+        return dao.getSetting(key).deserializeOverlayProfile()
+    }
+
+    suspend fun setOverlayProfile(posture: OverlayPostureKey, profile: OverlayProfile) {
+        val key = "${SettingsKeys.OVERLAY_PROFILE_PREFIX}${posture.key}"
+        save(key, profile.serialize())
+    }
 
     suspend fun toggleApp(packageName: String, isEnabled: Boolean) {
         val currentString = dao.getSetting(SettingsKeys.ALLOWED_PACKAGES)

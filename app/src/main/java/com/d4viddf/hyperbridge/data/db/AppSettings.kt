@@ -19,6 +19,9 @@ object SettingsKeys {
     const val PRIORITY_EDU = "priority_edu_shown"
     const val ALLOWED_PACKAGES = "allowed_packages"
     const val PRIORITY_ORDER = "priority_app_order"
+    const val RENDERER_PREFERENCE = "renderer_preference"
+    const val OVERLAY_SHOW_ON_LOCKSCREEN = "overlay_show_on_lockscreen"
+    const val OVERLAY_PROFILE_PREFIX = "overlay_profile_"
 
     // Global Configs
     const val GLOBAL_FLOAT = "global_float"

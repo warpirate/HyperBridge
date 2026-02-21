@@ -5,6 +5,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.KeyguardManager
 import android.content.Intent
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
@@ -23,8 +24,16 @@ import com.d4viddf.hyperbridge.models.ActiveIsland
 import com.d4viddf.hyperbridge.models.HyperIslandData
 import com.d4viddf.hyperbridge.models.IslandLimitMode
 import com.d4viddf.hyperbridge.models.NotificationType
+import com.d4viddf.hyperbridge.models.RenderBackend
+import com.d4viddf.hyperbridge.models.RendererPreference
 import com.d4viddf.hyperbridge.models.WidgetConfig
 import com.d4viddf.hyperbridge.models.WidgetRenderMode
+import com.d4viddf.hyperbridge.service.render.OverlayAnchorManager
+import com.d4viddf.hyperbridge.service.render.OverlayContentExtractor
+import com.d4viddf.hyperbridge.service.render.RenderBackendResolver
+import com.d4viddf.hyperbridge.service.render.RendererCoordinator
+import com.d4viddf.hyperbridge.service.render.UniversalOverlayRenderer
+import com.d4viddf.hyperbridge.service.render.XiaomiNativeRenderer
 import com.d4viddf.hyperbridge.service.translators.CallTranslator
 import com.d4viddf.hyperbridge.service.translators.MediaTranslator
 import com.d4viddf.hyperbridge.service.translators.NavTranslator
@@ -62,6 +71,8 @@ class NotificationReaderService : NotificationListenerService() {
     private var currentMode = IslandLimitMode.MOST_RECENT
     private var appPriorityList = emptyList<String>()
     private var globalBlockedTerms: Set<String> = emptySet()
+    private var rendererPreference = RendererPreference.AUTO
+    private var overlayShowOnLockscreen = true
 
     // --- CACHES ---
     private val activeIslands = ConcurrentHashMap<String, ActiveIsland>()
@@ -89,6 +100,9 @@ class NotificationReaderService : NotificationListenerService() {
     private lateinit var standardTranslator: StandardTranslator
     private lateinit var mediaTranslator: MediaTranslator
     private lateinit var widgetTranslator: WidgetTranslator
+    private lateinit var backendResolver: RenderBackendResolver
+    private lateinit var rendererCoordinator: RendererCoordinator
+    private lateinit var overlayExtractor: OverlayContentExtractor
 
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override fun onCreate() {
@@ -110,6 +124,21 @@ class NotificationReaderService : NotificationListenerService() {
         // Media and Widget translators don't necessarily need the repo yet
         mediaTranslator = MediaTranslator(this)
         widgetTranslator = WidgetTranslator(this)
+        overlayExtractor = OverlayContentExtractor(this)
+
+        backendResolver = RenderBackendResolver(this)
+        val xiaomiRenderer = XiaomiNativeRenderer(this, NOTIFICATION_CHANNEL_ID, EXTRA_ORIGINAL_KEY)
+        val overlayRenderer = UniversalOverlayRenderer(
+            context = this,
+            anchorManager = OverlayAnchorManager(this, preferences),
+            showOnLockscreenProvider = { overlayShowOnLockscreen }
+        )
+        rendererCoordinator = RendererCoordinator(
+            resolver = backendResolver,
+            xiaomiRenderer = xiaomiRenderer,
+            overlayRenderer = overlayRenderer
+        )
+        rendererCoordinator.refreshBackend(rendererPreference)
 
         WidgetManager.init(this)
 
@@ -117,6 +146,21 @@ class NotificationReaderService : NotificationListenerService() {
         serviceScope.launch { preferences.limitModeFlow.collectLatest { currentMode = it } }
         serviceScope.launch { preferences.appPriorityListFlow.collectLatest { appPriorityList = it } }
         serviceScope.launch { preferences.globalBlockedTermsFlow.collectLatest { globalBlockedTerms = it } }
+        serviceScope.launch {
+            preferences.overlayShowOnLockscreenFlow.collectLatest { overlayShowOnLockscreen = it }
+        }
+        serviceScope.launch {
+            preferences.rendererPreferenceFlow.collectLatest { pref ->
+                rendererPreference = pref
+                val previous = rendererCoordinator.getActiveBackend()
+                val resolved = rendererCoordinator.refreshBackend(pref)
+                if (previous != resolved) {
+                    activeIslands.clear()
+                    activeTranslations.clear()
+                    reverseTranslations.clear()
+                }
+            }
+        }
 
         // [FIX] Listen for Theme Changes and update the Repository
         serviceScope.launch {
@@ -202,18 +246,14 @@ class NotificationReaderService : NotificationListenerService() {
                     serviceScope.launch {
                         cancelSourceNotification(originalKey)
                     }
+                    rendererCoordinator.dismissByRenderedId(notifId)
                     cleanupCache(originalKey)
                 }
                 return
             }
 
-            if (activeTranslations.containsKey(notifKey)) {
-                val hyperId = activeTranslations[notifKey] ?: return
-
-                try {
-                    NotificationManagerCompat.from(this).cancel(hyperId)
-                } catch (e: Exception) {}
-
+            if (activeIslands.containsKey(notifKey) || activeTranslations.containsKey(notifKey)) {
+                rendererCoordinator.dismiss(notifKey)
                 cleanupCache(notifKey)
             }
         }
@@ -383,23 +423,61 @@ class NotificationReaderService : NotificationListenerService() {
             // Merge configs (Island behavior config, NOT theme style)
             val finalConfig = appIslandConfig.mergeWith(globalConfig)
 
-            val bridgeId = sbn.key.hashCode()
-            val picKey = "pic_${bridgeId}"
-
-            // [CRITICAL UPDATE] Pass 'activeTheme' to all Translators
-            val data: HyperIslandData = when (type) {
-                NotificationType.CALL -> callTranslator.translate(sbn, picKey, finalConfig, activeTheme)
-                NotificationType.NAVIGATION -> {
-                    val navLayout = preferences.getEffectiveNavLayout(sbn.packageName).first()
-                    navTranslator.translate(sbn, picKey, finalConfig, navLayout.first, navLayout.second, activeTheme)
-                }
-                NotificationType.TIMER -> timerTranslator.translate(sbn, picKey, finalConfig, activeTheme)
-                NotificationType.PROGRESS -> progressTranslator.translate(sbn, effectiveTitle, picKey, finalConfig, activeTheme)
-                NotificationType.MEDIA -> mediaTranslator.translate(sbn, picKey, finalConfig) // Media usually keeps its own art
-                else -> standardTranslator.translate(sbn, effectiveTitle, effectiveText, picKey, finalConfig, activeTheme)
+            val backend = rendererCoordinator.refreshBackend(rendererPreference)
+            val renderType = if (backend == RenderBackend.UNIVERSAL_OVERLAY) {
+                toOverlayType(type)
+            } else {
+                type
             }
 
-            val newContentHash = data.jsonParam.hashCode()
+            val payload: Any
+            val newContentHash: Int
+
+            when (backend) {
+                RenderBackend.XIAOMI_NATIVE -> {
+                    val bridgeId = sbn.key.hashCode()
+                    val picKey = "pic_${bridgeId}"
+
+                    val data: HyperIslandData = when (type) {
+                        NotificationType.CALL -> callTranslator.translate(sbn, picKey, finalConfig, activeTheme)
+                        NotificationType.NAVIGATION -> {
+                            val navLayout = preferences.getEffectiveNavLayout(sbn.packageName).first()
+                            navTranslator.translate(sbn, picKey, finalConfig, navLayout.first, navLayout.second, activeTheme)
+                        }
+                        NotificationType.TIMER -> timerTranslator.translate(sbn, picKey, finalConfig, activeTheme)
+                        NotificationType.PROGRESS -> progressTranslator.translate(sbn, effectiveTitle, picKey, finalConfig, activeTheme)
+                        NotificationType.MEDIA -> mediaTranslator.translate(sbn, picKey, finalConfig)
+                        else -> standardTranslator.translate(sbn, effectiveTitle, effectiveText, picKey, finalConfig, activeTheme)
+                    }
+                    payload = data
+                    newContentHash = data.jsonParam.hashCode()
+                }
+
+                RenderBackend.UNIVERSAL_OVERLAY -> {
+                    val content = overlayExtractor.extract(
+                        sbn = sbn,
+                        type = renderType,
+                        fallbackTitle = effectiveTitle,
+                        fallbackText = effectiveText,
+                        isLocked = isDeviceCurrentlyLocked(),
+                        showOnLockscreen = overlayShowOnLockscreen
+                    ) ?: run {
+                        rendererCoordinator.dismiss(key)
+                        cleanupCache(key)
+                        return
+                    }
+                    payload = content
+                    newContentHash = content.contentHash
+                }
+
+                RenderBackend.DISABLED,
+                RenderBackend.AUTO -> {
+                    rendererCoordinator.dismiss(key)
+                    cleanupCache(key)
+                    return
+                }
+            }
+
             val previousIsland = activeIslands[key]
 
             if (isUpdate && previousIsland != null && previousIsland.lastContentHash == newContentHash) {
@@ -413,11 +491,25 @@ class NotificationReaderService : NotificationListenerService() {
                 if (!exists) return
             } catch (e: Exception) { }
 
-            Log.i(TAG, " POSTING Island -> ID: $bridgeId, Type: $type, FinalTitle: '$effectiveTitle', FinalText: '$effectiveText'")
-            postStandardNotification(sbn, bridgeId, data)
+            val renderedId = rendererCoordinator.post(
+                preference = rendererPreference,
+                sourceKey = key,
+                sbn = sbn,
+                type = renderType,
+                config = finalConfig,
+                payload = payload
+            ) ?: return
 
+            if (backend == RenderBackend.XIAOMI_NATIVE) {
+                activeTranslations[key] = renderedId
+                reverseTranslations[renderedId] = key
+            } else {
+                activeTranslations.remove(key)
+            }
+
+            Log.i(TAG, " POSTING Island -> ID: $renderedId, Type: $renderType, FinalTitle: '$effectiveTitle', FinalText: '$effectiveText'")
             activeIslands[key] = ActiveIsland(
-                id = bridgeId, type = type, postTime = System.currentTimeMillis(),
+                id = renderedId, type = renderType, postTime = System.currentTimeMillis(),
                 packageName = sbn.packageName,
                 title = effectiveTitle,
                 text = effectiveText,
@@ -498,6 +590,25 @@ class NotificationReaderService : NotificationListenerService() {
         }
     }
 
+    private fun toOverlayType(type: NotificationType): NotificationType {
+        return when (type) {
+            NotificationType.STANDARD,
+            NotificationType.PROGRESS,
+            NotificationType.MEDIA -> type
+            else -> NotificationType.STANDARD
+        }
+    }
+
+    private fun isDeviceCurrentlyLocked(): Boolean {
+        val keyguardManager = getSystemService(KeyguardManager::class.java)
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            keyguardManager?.isDeviceLocked == true
+        } else {
+            @Suppress("DEPRECATION")
+            keyguardManager?.inKeyguardRestrictedInputMode() == true
+        }
+    }
+
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private fun postStandardNotification(sbn: StatusBarNotification, bridgeId: Int, data: HyperIslandData) {
         val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
@@ -551,6 +662,9 @@ class NotificationReaderService : NotificationListenerService() {
 
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     private suspend fun processSingleWidget(widgetId: Int, config: WidgetConfig) {
+        if (rendererCoordinator.refreshBackend(rendererPreference) != RenderBackend.XIAOMI_NATIVE) {
+            return
+        }
         try {
             val data = widgetTranslator.translate(widgetId)
             postWidgetNotification(WIDGET_ID_BASE + widgetId, data)
@@ -578,7 +692,7 @@ class NotificationReaderService : NotificationListenerService() {
         if (currentMode == IslandLimitMode.MOST_RECENT) {
             val oldest = activeIslands.minByOrNull { it.value.postTime }
             oldest?.let {
-                NotificationManagerCompat.from(this).cancel(it.value.id)
+                rendererCoordinator.dismiss(it.key)
                 cleanupCache(it.key)
             }
         }
@@ -615,5 +729,9 @@ class NotificationReaderService : NotificationListenerService() {
     private fun isAppAllowed(packageName: String): Boolean = allowedPackageSet.contains(packageName)
 
     override fun onListenerConnected() { Log.i(TAG, "HyperBridge Service Connected") }
-    override fun onDestroy() { super.onDestroy(); serviceScope.cancel() }
+    override fun onDestroy() {
+        rendererCoordinator.clearAll()
+        super.onDestroy()
+        serviceScope.cancel()
+    }
 }

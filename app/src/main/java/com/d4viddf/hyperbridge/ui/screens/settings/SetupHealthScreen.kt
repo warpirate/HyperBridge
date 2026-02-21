@@ -46,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,17 +64,24 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.d4viddf.hyperbridge.R
+import com.d4viddf.hyperbridge.data.AppPreferences
+import com.d4viddf.hyperbridge.models.RenderBackend
 import com.d4viddf.hyperbridge.util.DeviceUtils
 import com.d4viddf.hyperbridge.util.isNotificationServiceEnabled
+import com.d4viddf.hyperbridge.util.isOverlayPermissionGranted
 import com.d4viddf.hyperbridge.util.isPostNotificationsEnabled
 import com.d4viddf.hyperbridge.util.openAutoStartSettings
 import com.d4viddf.hyperbridge.util.openBatterySettings
+import com.d4viddf.hyperbridge.util.openOverlayPermissionSettings
+import com.d4viddf.hyperbridge.service.render.RenderBackendResolver
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SetupHealthScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+    val preferences = remember { AppPreferences(context) }
+    val backendResolver = remember { RenderBackendResolver(context) }
 
     // SCROLL BEHAVIOR: Connects the scrollable content to the AppBar
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -81,7 +89,9 @@ fun SetupHealthScreen(onBack: () -> Unit) {
     // --- STATE ---
     var isListenerGranted by remember { mutableStateOf(isNotificationServiceEnabled(context)) }
     var isPostGranted by remember { mutableStateOf(isPostNotificationsEnabled(context)) }
+    var isOverlayGranted by remember { mutableStateOf(isOverlayPermissionGranted(context)) }
     var isBatteryOptimized by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
+    val rendererPreference by preferences.rendererPreferenceFlow.collectAsState(initial = com.d4viddf.hyperbridge.models.RendererPreference.AUTO)
 
     // --- LIFECYCLE ---
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -90,6 +100,7 @@ fun SetupHealthScreen(onBack: () -> Unit) {
             if (event == Lifecycle.Event.ON_RESUME) {
                 isListenerGranted = isNotificationServiceEnabled(context)
                 isPostGranted = isPostNotificationsEnabled(context)
+                isOverlayGranted = isOverlayPermissionGranted(context)
                 isBatteryOptimized = isIgnoringBatteryOptimizations(context)
             }
         }
@@ -99,10 +110,16 @@ fun SetupHealthScreen(onBack: () -> Unit) {
 
     // --- DEVICE CHECKS ---
     val isXiaomi = DeviceUtils.isXiaomi
-    val isCompatibleOS = DeviceUtils.isCompatibleOS()
-    val osVersionString = DeviceUtils.getHyperOSVersion()
     val isCN = DeviceUtils.isCNRom
     val deviceModel = android.os.Build.MODEL
+    val activeBackend = backendResolver.resolve(rendererPreference)
+    val backendSubtitle = when (activeBackend) {
+        RenderBackend.XIAOMI_NATIVE -> stringResource(R.string.backend_native_mode)
+        RenderBackend.UNIVERSAL_OVERLAY -> stringResource(R.string.backend_overlay_mode)
+        RenderBackend.DISABLED -> stringResource(R.string.backend_disabled_mode)
+        RenderBackend.AUTO -> stringResource(R.string.backend_auto_mode)
+    }
+    val overlayRequired = activeBackend != RenderBackend.XIAOMI_NATIVE
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection), // FIX: Connects scrolling
@@ -158,17 +175,17 @@ fun SetupHealthScreen(onBack: () -> Unit) {
                 StatusRow(
                     title = android.os.Build.MANUFACTURER.uppercase(),
                     subtitle = deviceModel,
-                    isSuccess = isXiaomi,
+                    isSuccess = true,
                     icon = Icons.Default.Smartphone
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(0.2f))
 
-                // OS
+                // Backend
                 StatusRow(
-                    title = stringResource(R.string.system_version),
-                    subtitle = osVersionString,
-                    isSuccess = isCompatibleOS,
-                    icon = if (isCompatibleOS) Icons.Default.CheckCircle else Icons.Default.Warning
+                    title = stringResource(R.string.renderer_backend),
+                    subtitle = backendSubtitle,
+                    isSuccess = activeBackend != RenderBackend.DISABLED,
+                    icon = if (activeBackend != RenderBackend.DISABLED) Icons.Default.CheckCircle else Icons.Default.Warning
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -200,6 +217,15 @@ fun SetupHealthScreen(onBack: () -> Unit) {
                         } catch (e: Exception) { }
                     }
                 )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(0.2f))
+
+                HealthItem(
+                    title = stringResource(R.string.overlay_permission_title),
+                    subtitle = stringResource(R.string.overlay_permission_desc),
+                    icon = Icons.Default.Visibility,
+                    isGranted = if (overlayRequired) isOverlayGranted else true,
+                    onClick = { openOverlayPermissionSettings(context) }
+                )
             }
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -208,7 +234,7 @@ fun SetupHealthScreen(onBack: () -> Unit) {
             HealthGroupCard {
                 // Autostart
                 HealthItem(
-                    title = stringResource(R.string.xiaomi_autostart),
+                    title = stringResource(if (isXiaomi) R.string.xiaomi_autostart else R.string.autostart_generic),
                     subtitle = stringResource(R.string.autostart_manual_check),
                     icon = Icons.Default.RestartAlt,
                     isGranted = false,

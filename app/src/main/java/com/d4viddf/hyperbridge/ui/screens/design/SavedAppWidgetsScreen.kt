@@ -52,7 +52,10 @@ import androidx.core.graphics.drawable.toBitmap
 import com.d4viddf.hyperbridge.R
 import com.d4viddf.hyperbridge.data.AppPreferences
 import com.d4viddf.hyperbridge.data.widget.WidgetManager
+import com.d4viddf.hyperbridge.models.RenderBackend
+import com.d4viddf.hyperbridge.models.RendererPreference
 import com.d4viddf.hyperbridge.models.WidgetSize
+import com.d4viddf.hyperbridge.service.render.RenderBackendResolver
 import com.d4viddf.hyperbridge.ui.components.EmptyState // Import EmptyState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -80,6 +83,9 @@ fun SavedAppWidgetsScreen(
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     val preferences = remember { AppPreferences(context.applicationContext) }
+    val backendResolver = remember { RenderBackendResolver(context) }
+    val rendererPreference by preferences.rendererPreferenceFlow.collectAsState(initial = RendererPreference.AUTO)
+    val widgetSupported = backendResolver.resolve(rendererPreference) == RenderBackend.XIAOMI_NATIVE
 
     var allGroups by remember { mutableStateOf<List<SavedWidgetGroup>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
@@ -90,7 +96,12 @@ fun SavedAppWidgetsScreen(
     val pullState = rememberPullToRefreshState()
     val isRefreshing = isLoading && allGroups.isNotEmpty()
 
-    LaunchedEffect(refreshTrigger.value) {
+    LaunchedEffect(refreshTrigger.value, widgetSupported) {
+        if (!widgetSupported) {
+            allGroups = emptyList()
+            isLoading = false
+            return@LaunchedEffect
+        }
         isLoading = true
         withContext(Dispatchers.IO) {
             val savedIds = preferences.savedWidgetIdsFlow.first()
@@ -170,7 +181,7 @@ fun SavedAppWidgetsScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = onAddMore,
+                onClick = { if (widgetSupported) onAddMore() },
                 icon = { Icon(Icons.Default.Add, null) },
                 text = { Text(stringResource(R.string.new_widget_fab)) }
             )
@@ -180,6 +191,17 @@ fun SavedAppWidgetsScreen(
         Column(
             modifier = Modifier.padding(padding).fillMaxSize()
         ) {
+            if (!widgetSupported) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    EmptyState(
+                        title = stringResource(R.string.widget_phase2_title),
+                        description = stringResource(R.string.widget_phase2_desc),
+                        icon = Icons.Outlined.Widgets
+                    )
+                }
+                return@Column
+            }
+
             // SEARCH
             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 TextField(

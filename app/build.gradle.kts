@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "com.d4viddf.hyperbridge"
-        minSdk = 35
+        minSdk = 26
         targetSdk = 36
         versionCode = 14
         versionName = "0.4.0"
